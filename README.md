@@ -11,6 +11,8 @@ This project demonstrates how to use a **Raspberry Pi 4** to read data from an *
 - [Software Setup](#software-setup)
 - [Wiring Diagram](#wiring-diagram)
 - [Usage](#usage)
+- [Python Code Example](#python-code-example)
+- [C Code Example](#c-code-example)
 - [References](#references)
 
 ---
@@ -28,6 +30,7 @@ This project demonstrates how to use a **Raspberry Pi 4** to read data from an *
 - Required Python Libraries:
   - `smbus2`
   - `time`
+- GCC Compiler (for C code)
 
 ---
 
@@ -64,7 +67,7 @@ This project demonstrates how to use a **Raspberry Pi 4** to read data from an *
 Run the following commands to ensure your system is up to date and to install the required libraries:
 ```bash
 sudo apt update && sudo apt upgrade -y
-sudo apt install python3-smbus python3-pip -y
+sudo apt install python3-smbus python3-pip gcc make -y
 pip3 install smbus2
 ```
 
@@ -119,6 +122,86 @@ Execute the script with the following command:
 python3 sht30_reader.py
 ```
 You should see real-time temperature and humidity readings displayed in the terminal.
+
+---
+
+### C Code Example
+Save the following C code to a file (e.g., `sht30_reader.c`) and compile it using GCC:
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <linux/i2c-dev.h>
+#include <sys/ioctl.h>
+
+#define SHT30_ADDR 0x44
+
+int main() {
+    int fd;
+    char *filename = (char *)"/dev/i2c-1";
+    char buf[6];
+
+    if ((fd = open(filename, O_RDWR)) < 0) {
+        perror("Failed to open the i2c bus");
+        exit(1);
+    }
+
+    if (ioctl(fd, I2C_SLAVE, SHT30_ADDR) < 0) {
+        perror("Failed to acquire bus access and/or talk to slave");
+        close(fd);
+        exit(1);
+    }
+
+    while (1) {
+        // Send measurement command
+        char cmd[2] = {0x2C, 0x06};
+        if (write(fd, cmd, 2) != 2) {
+            perror("Failed to write to the i2c device");
+            close(fd);
+            exit(1);
+        }
+
+        // Wait for the measurement to complete
+        usleep(500000); // 500 ms
+
+        // Read 6 bytes of data
+        if (read(fd, buf, 6) != 6) {
+            perror("Failed to read from the i2c device");
+            close(fd);
+            exit(1);
+        }
+
+        // Convert the data
+        int temp_raw = (buf[0] << 8) | buf[1];
+        int hum_raw = (buf[3] << 8) | buf[4];
+
+        double temperature = -45 + (175.0 * temp_raw / 65535.0);
+        double humidity = 100.0 * hum_raw / 65535.0;
+
+        printf("Temperature: %.2f°C, Humidity: %.2f%%\n", temperature, humidity);
+
+        sleep(1); // Wait for 1 second
+    }
+
+    close(fd);
+    return 0;
+}
+```
+
+### Compile and Run the C Program
+To compile the code:
+```bash
+gcc -o sht30_reader sht30_reader.c
+```
+
+To run the program:
+```bash
+sudo ./sht30_reader
+```
+
+You should see the temperature and humidity readings printed to the terminal in real time.
 
 ---
 
